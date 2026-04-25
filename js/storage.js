@@ -21,8 +21,15 @@ window.State = {
   completed: Store.get('completed', {}),
   streak: Store.get('streak', { count: 0, lastDate: null }),
   selectedVoice: Store.get('voice', null),
+  // AI provider: 'gemini' or 'groq'
+  aiProvider: Store.get('ai_provider', 'gemini'),
+  // Gemini
   apiKey: Store.get('api_key', ''),
   model: Store.get('model', 'gemini-2.0-flash'),
+  // Groq
+  groqKey: Store.get('groq_key', ''),
+  groqModel: Store.get('groq_model', 'llama-3.3-70b-versatile'),
+  // YouTube
   youtubeKey: Store.get('youtube_key', ''),
   ytSearchKeywords: Store.get('yt_keywords', {
     A2: 'easy English for beginners simple lessons',

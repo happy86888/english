@@ -331,6 +331,11 @@ function refreshApiStatus() {
   document.getElementById('apiKeyInput').value = State.apiKey ? '••••••••••••••' + State.apiKey.slice(-4) : '';
 }
 
+function refreshGroqStatus() {
+  document.getElementById('groqStatus').classList.toggle('connected', !!State.groqKey);
+  document.getElementById('groqKeyInput').value = State.groqKey ? '••••••••••••••' + State.groqKey.slice(-4) : '';
+}
+
 function refreshYtApiStatus() {
   document.getElementById('ytApiStatus').classList.toggle('connected', !!State.youtubeKey);
   document.getElementById('ytApiKeyInput').value = State.youtubeKey ? '••••••••••••••' + State.youtubeKey.slice(-4) : '';
@@ -338,7 +343,18 @@ function refreshYtApiStatus() {
 
 function setupSettings() {
   refreshApiStatus();
+  refreshGroqStatus();
 
+  // AI provider selector
+  document.getElementById('aiProviderSelect').value = State.aiProvider || 'gemini';
+  document.getElementById('aiProviderSelect').addEventListener('change', e => {
+    State.aiProvider = e.target.value;
+    Store.set('ai_provider', e.target.value);
+    const name = e.target.value === 'groq' ? 'Groq (Llama)' : 'Google Gemini';
+    toast(`AI 提供者已切換為 ${name}`);
+  });
+
+  // Gemini key
   document.getElementById('apiKeyInput').addEventListener('focus', e => {
     if (State.apiKey && e.target.value.startsWith('•')) e.target.value = '';
   });
@@ -353,13 +369,37 @@ function setupSettings() {
     State.apiKey = v;
     Store.set('api_key', v);
     refreshApiStatus();
-    toast(v ? '已儲存 API key' : '已清除 API key');
+    toast(v ? '已儲存 Gemini key' : '已清除 Gemini key');
   };
 
   document.getElementById('modelSelect').value = State.model;
   document.getElementById('modelSelect').addEventListener('change', e => {
     State.model = e.target.value;
     Store.set('model', e.target.value);
+  });
+
+  // Groq key
+  document.getElementById('groqKeyInput').addEventListener('focus', e => {
+    if (State.groqKey && e.target.value.startsWith('•')) e.target.value = '';
+  });
+
+  document.getElementById('saveGroqKeyBtn').onclick = () => {
+    const v = document.getElementById('groqKeyInput').value.trim();
+    if (v.startsWith('•')) return;
+    if (v && !v.startsWith('gsk_')) {
+      toast('Groq API key 通常以 gsk_ 開頭');
+      return;
+    }
+    State.groqKey = v;
+    Store.set('groq_key', v);
+    refreshGroqStatus();
+    toast(v ? '已儲存 Groq key' : '已清除 Groq key');
+  };
+
+  document.getElementById('groqModelSelect').value = State.groqModel;
+  document.getElementById('groqModelSelect').addEventListener('change', e => {
+    State.groqModel = e.target.value;
+    Store.set('groq_model', e.target.value);
   });
 
   /* YouTube API key setup */
@@ -458,7 +498,7 @@ function setupSettings() {
   });
 
   document.getElementById('clearBtn').onclick = () => {
-    if (confirm('確定要清除所有資料嗎？包括 API key、單字本、AI 短文、自訂影片。此操作無法復原。')) {
+    if (confirm('確定要清除所有資料嗎？包括所有 API key、單字本、AI 短文、自訂影片。此操作無法復原。')) {
       Store.clearAll();
       State.vocab = {};
       State.customArticles = [];
@@ -467,9 +507,11 @@ function setupSettings() {
       State.completed = {};
       State.streak = { count: 0, lastDate: null };
       State.apiKey = '';
+      State.groqKey = '';
       State.youtubeKey = '';
       State.ytCachedVideos = { date: null, videos: [] };
       refreshApiStatus();
+      refreshGroqStatus();
       refreshYtApiStatus();
       toast('已清除所有資料');
       renderDashboard();

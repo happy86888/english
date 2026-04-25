@@ -1,14 +1,18 @@
 /* ============================================================
-   api.js · Google Gemini API 呼叫
+   api.js · AI 呼叫，支援 Gemini 與 Groq 雙提供者
    API key 從不離開使用者的瀏覽器。
    ============================================================ */
 
 window.checkApiKey = function() {
-  if (!State.apiKey) {
-    toast('請先到「設定」填入 Gemini API key');
+  const provider = State.aiProvider || 'gemini';
+  const hasKey = provider === 'groq' ? !!State.groqKey : !!State.apiKey;
+  if (!hasKey) {
+    const providerName = provider === 'groq' ? 'Groq' : 'Gemini';
+    toast(`請先到「設定」填入 ${providerName} API key`);
     showView('settings');
     setTimeout(() => {
-      const input = document.getElementById('apiKeyInput');
+      const inputId = provider === 'groq' ? 'groqKeyInput' : 'apiKeyInput';
+      const input = document.getElementById(inputId);
       if (input) input.focus();
     }, 400);
     return false;
@@ -17,9 +21,13 @@ window.checkApiKey = function() {
 };
 
 window.callAI = async function(prompt, opts = {}) {
-  // opts.json: false 表示要純文字（預設 true，回傳 JSON）
-  // opts.systemInstruction: 可選的 system 提示
-  // opts.temperature: 預設 0.85
+  const provider = State.aiProvider || 'gemini';
+  if (provider === 'groq') return callGroq(prompt, opts);
+  return callGemini(prompt, opts);
+};
+
+/* ---------- Gemini ---------- */
+async function callGemini(prompt, opts) {
   const expectJSON = opts.json !== false;
   const systemText = opts.systemInstruction
     || 'You are an English teacher creating learning content for a Mandarin-speaking learner in Taiwan. Use Traditional Chinese (繁體中文 / 台灣用語) for Chinese translations.';
@@ -36,7 +44,6 @@ window.callAI = async function(prompt, opts = {}) {
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${State.model}:generateContent?key=${encodeURIComponent(State.apiKey)}`;
-
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,17 +51,69 @@ window.callAI = async function(prompt, opts = {}) {
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`API ${res.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`Gemini ${res.status}: ${errText.slice(0, 200)}`);
   }
   const data = await res.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('AI 沒有回傳內容');
+  if (!text) throw new Error('Gemini 沒有回傳內容');
   if (expectJSON) {
     try { return JSON.parse(text); }
     catch { throw new Error('AI 回傳格式錯誤'); }
   }
   return text;
-};
+}
+
+/* ---------- Groq (OpenAI-compatible) ---------- */
+async function callGroq(prompt, opts) {
+  const expectJSON = opts.json !== false;
+  const systemText = opts.systemInstruction
+    || 'You are an English teacher creating learning content for a Mandarin-speaking learner in Taiwan. Use Traditional Chinese (繁體中文 / 台灣用語) for Chinese translations. When asked for JSON, respond ONLY with valid JSON, no surrounding prose or markdown fences.';
+
+  const body = {
+    model: State.groqModel || 'llama-3.3-70b-versatile',
+    messages: [
+      { role: 'system', content: systemText },
+      { role: 'user', content: prompt }
+    ],
+    temperature: opts.temperature ?? 0.85
+  };
+  if (expectJSON) {
+    body.response_format = { type: 'json_object' };
+  }
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${State.groqKey}`
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Groq ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  let text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Groq 沒有回傳內容');
+
+  if (expectJSON) {
+    // Llama 有時會包 ```json ... ``` 或多餘前後綴，先清乾淨再 parse
+    text = text.trim();
+    if (text.startsWith('```')) {
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+    // 如果還有前後綴文字，找出第一個 { 到最後一個 }
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace > 0 || (lastBrace > 0 && lastBrace < text.length - 1)) {
+      text = text.slice(firstBrace, lastBrace + 1);
+    }
+    try { return JSON.parse(text); }
+    catch (err) { throw new Error('Groq JSON 解析失敗：' + err.message.slice(0, 100)); }
+  }
+  return text;
+}
 
 /* ---------- Wikipedia 隨機摘要（用於 AI 改寫的素材） ---------- */
 window.fetchWikipediaSummary = async function() {

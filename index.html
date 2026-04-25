@@ -132,7 +132,11 @@
       <button class="action-btn" id="addVideoBtn">＋ 加入自訂影片</button>
     </div>
     <div class="vocab-controls">
-      <button class="filter-btn active" data-vcat="fresh">🔥 每日新鮮</button>
+      <button class="filter-btn active" data-vcat="all">全部</button>
+      <button class="filter-btn" data-vcat="fresh">🔥 每日新鮮</button>
+      <button class="filter-btn" data-vcat="youtube">英文教學</button>
+      <button class="filter-btn" data-vcat="ted">TED 演講</button>
+      <button class="filter-btn" data-vcat="short">英文短片</button>
     </div>
     <div class="video-grid" id="videoGrid"></div>
   </section>
@@ -229,11 +233,27 @@
     </div>
 
     <div class="settings-section">
+      <h3>AI <em style="color:var(--accent); font-style:italic">提供者</em></h3>
+      <p style="color:var(--ink-muted); font-size:0.9rem; margin-bottom:0.8rem">
+        選擇要用哪個 AI 服務。所有 AI 功能（產生短文、複習文、口說回饋、對話）都會使用這個提供者。
+      </p>
+      <div class="settings-row">
+        <div class="settings-label">
+          目前使用
+          <small>切換後立刻生效，不需重新載入</small>
+        </div>
+        <select id="aiProviderSelect" class="search-input" style="max-width:220px">
+          <option value="gemini">Google Gemini</option>
+          <option value="groq">Groq (Llama)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <h3>Google Gemini API <em style="color:var(--accent); font-style:italic">key</em></h3>
       <p style="color:var(--ink-muted); font-size:0.9rem; margin-bottom:0.8rem">
-        填入後即可使用 AI 產生新短文、個人化複習、口說回饋。
-        <strong>金鑰只儲存在你的瀏覽器，永遠不會傳到其他地方。</strong>
-        到 <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a> 免費取得（不需綁信用卡）。
+        到 <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a> 免費取得。
+        免費版每分鐘 15 次、每天 1500 次。
       </p>
       <div class="api-key-row">
         <span class="api-status" id="apiStatus"></span>
@@ -243,12 +263,36 @@
       <div class="settings-row" style="margin-top:1rem">
         <div class="settings-label">
           模型
-          <small>建議用 gemini-2.0-flash（速度快、免費額度大）</small>
+          <small>建議用 gemini-2.0-flash</small>
         </div>
         <select id="modelSelect" class="search-input" style="max-width:220px">
           <option value="gemini-2.0-flash" selected>gemini-2.0-flash</option>
           <option value="gemini-2.5-flash">gemini-2.5-flash</option>
           <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Groq API <em style="color:var(--accent); font-style:italic">key</em></h3>
+      <p style="color:var(--ink-muted); font-size:0.9rem; margin-bottom:0.8rem">
+        到 <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent)">console.groq.com/keys</a> 免費取得（Google 登入即可，不需綁信用卡）。
+        免費版每分鐘 30 次、每天 14,400 次，比 Gemini 寬鬆很多，速度也快。
+      </p>
+      <div class="api-key-row">
+        <span class="api-status" id="groqStatus"></span>
+        <input type="password" class="search-input" id="groqKeyInput" placeholder="gsk_..." autocomplete="off">
+        <button class="action-btn" id="saveGroqKeyBtn">儲存</button>
+      </div>
+      <div class="settings-row" style="margin-top:1rem">
+        <div class="settings-label">
+          模型
+          <small>70B 品質好但稍慢，8B 快但簡單些</small>
+        </div>
+        <select id="groqModelSelect" class="search-input" style="max-width:240px">
+          <option value="llama-3.3-70b-versatile" selected>llama-3.3-70b-versatile（推薦）</option>
+          <option value="llama-3.1-8b-instant">llama-3.1-8b-instant（快）</option>
+          <option value="gemma2-9b-it">gemma2-9b-it</option>
         </select>
       </div>
     </div>
