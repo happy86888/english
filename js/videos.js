@@ -5,7 +5,7 @@
    - 「每日新鮮」分類從 YouTube Data API 即時搜尋當天熱門影片
    ============================================================ */
 
-let videoFilter = 'all';
+let videoFilter = 'fresh';
 
 window.renderVideos = function() {
   const grid = document.getElementById('videoGrid');
