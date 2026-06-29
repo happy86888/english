@@ -6,6 +6,8 @@
 window.openArticle = function(id, highlightWord) {
   const article = getAllArticles().find(a => a.id === id);
   if (!article) return;
+  // 存取控制檢查
+  if (!Access.tryUse('article-' + id)) return;
   State.currentArticle = article;
 
   document.getElementById('readerLevel').textContent = article.level;
@@ -253,30 +255,108 @@ window.removeWord = function(word) {
   if (document.getElementById('view-vocab')?.classList.contains('active')) renderVocab();
 };
 
-/* ---------- Speech synthesis ---------- */
+/* ---------- TTS Engine: Google Cloud or Browser fallback ---------- */
 window.voices = [];
 window.loadVoices = function() {
   voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
   const sel = document.getElementById('voiceSelect');
   if (sel) {
-    sel.innerHTML = voices.map(v => `<option value="${v.name}">${v.name} (${v.lang})</option>`).join('');
-    if (State.selectedVoice && voices.find(v => v.name === State.selectedVoice)) sel.value = State.selectedVoice;
+    const ranked = rankBrowserVoices(voices);
+    sel.innerHTML = ranked.map(v =>
+      `<option value="${v.name}"${v.name === State.selectedVoice ? ' selected' : ''}>${v.name} (${v.lang})</option>`
+    ).join('');
+    if (!State.selectedVoice && ranked.length > 0) {
+      State.selectedVoice = ranked[0].name;
+      Store.set('voice', ranked[0].name);
+      sel.value = ranked[0].name;
+    }
   }
 };
 
-window.speakWord = function(word) {
+function rankBrowserVoices(vs) {
+  const preferred = ['Samantha', 'Google US English', 'Microsoft Aria Online', 'Microsoft Guy Online', 'Karen', 'Daniel'];
+  return [...vs].sort((a, b) => {
+    const ai = preferred.findIndex(p => a.name.startsWith(p));
+    const bi = preferred.findIndex(p => b.name.startsWith(p));
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
+/* Google Cloud TTS — returns base64 MP3 */
+const ttsCache = new Map();
+
+async function googleTTS(text, rate) {
+  rate = rate || 1.0;
+  const cacheKey = text + '::' + State.ttsVoice + '::' + rate;
+  if (ttsCache.has(cacheKey)) return ttsCache.get(cacheKey);
+
+  const body = {
+    input: { text },
+    voice: {
+      languageCode: 'en-US',
+      name: State.ttsVoice || 'en-US-Neural2-J',
+      ssmlGender: State.ttsGender || 'MALE'
+    },
+    audioConfig: {
+      audioEncoding: 'MP3',
+      speakingRate: rate,
+      pitch: 0,
+      effectsProfileId: ['headphone-class-device']
+    }
+  };
+
+  const url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + encodeURIComponent(State.googleTtsKey);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error('Google TTS ' + res.status + ': ' + err.slice(0, 120));
+  }
+  const data = await res.json();
+  ttsCache.set(cacheKey, data.audioContent);
+  return data.audioContent;
+}
+
+/* ---------- speakWord (single word / short phrase) ---------- */
+let currentWordAudio = null;
+
+window.speakWord = async function(word) {
   speechSynthesis.cancel();
+  if (currentWordAudio) { currentWordAudio.pause(); currentWordAudio = null; }
+
+  if (State.ttsProvider === 'google' && State.googleTtsKey) {
+    try {
+      const b64 = await googleTTS(word, 0.85);
+      const audio = new Audio('data:audio/mp3;base64,' + b64);
+      currentWordAudio = audio;
+      audio.play().catch(() => {});
+      return;
+    } catch (err) {
+      console.warn('Google TTS word failed, using browser:', err.message);
+    }
+  }
+  // Browser fallback
   const u = new SpeechSynthesisUtterance(word);
   u.lang = 'en-US';
+  u.rate = 0.9;
   if (State.selectedVoice) {
     const v = voices.find(x => x.name === State.selectedVoice);
     if (v) u.voice = v;
   }
-  u.rate = 0.9;
   speechSynthesis.speak(u);
 };
 
-/* ---------- Audio bar (article TTS + recording) ---------- */
+/* ---------- Audio bar ---------- */
+let articleAudioPlaying = false;
+let articleAudioPaused = false;
+let currentArticleAudio = null;
+
 window.initAudioBar = function() {
   document.getElementById('toggleZh').onclick = () => {
     const zh = document.getElementById('readerZh');
@@ -298,7 +378,7 @@ window.initAudioBar = function() {
     if (q.classList.contains('visible')) q.scrollIntoView({behavior:'smooth', block:'start'});
   };
 
-  document.getElementById('audioPlay').onclick = playArticle;
+  document.getElementById('audioPlay').onclick = handlePlayButton;
 
   document.querySelectorAll('.speed-btn').forEach(b => {
     b.addEventListener('click', () => {
@@ -311,58 +391,94 @@ window.initAudioBar = function() {
   setupRecording();
 };
 
-function playArticle() {
+function handlePlayButton() {
   if (!State.currentArticle) return;
-  if (speechSynthesis.speaking && !speechSynthesis.paused) {
-    speechSynthesis.pause();
-    document.getElementById('audioPlay').textContent = '▶';
+  const btn = document.getElementById('audioPlay');
+
+  if (State.ttsProvider === 'google' && State.googleTtsKey) {
+    if (articleAudioPlaying && !articleAudioPaused) {
+      if (currentArticleAudio) { currentArticleAudio.pause(); articleAudioPaused = true; btn.textContent = '▶'; }
+      return;
+    }
+    if (articleAudioPaused && currentArticleAudio) {
+      currentArticleAudio.play(); articleAudioPaused = false; btn.textContent = '❚❚';
+      return;
+    }
+    playArticleGoogle();
     return;
   }
+  playArticleBrowser();
+}
+
+async function playArticleGoogle() {
+  if (!State.currentArticle) return;
+  const btn = document.getElementById('audioPlay');
+  const paragraphs = State.currentArticle.en;
+  btn.textContent = '…'; btn.disabled = true;
+  articleAudioPlaying = true; articleAudioPaused = false;
+
+  try {
+    const rate = State.speechRate || 1.0;
+    const audioList = await Promise.all(paragraphs.map(p => googleTTS(p, rate)));
+    btn.disabled = false; btn.textContent = '❚❚';
+    let idx = 0;
+    function playNext() {
+      if (!articleAudioPlaying || idx >= audioList.length) {
+        btn.textContent = '▶'; articleAudioPlaying = false; return;
+      }
+      const audio = new Audio('data:audio/mp3;base64,' + audioList[idx]);
+      currentArticleAudio = audio;
+      audio.onended = () => { idx++; if (!articleAudioPaused) playNext(); };
+      audio.onerror = () => { idx++; playNext(); };
+      audio.play().catch(() => { btn.textContent = '▶'; articleAudioPlaying = false; });
+    }
+    playNext();
+  } catch (err) {
+    btn.disabled = false; btn.textContent = '▶'; articleAudioPlaying = false;
+    toast('Google TTS 失敗，切換瀏覽器聲音');
+    playArticleBrowser();
+  }
+}
+
+function playArticleBrowser() {
+  const btn = document.getElementById('audioPlay');
+  if (speechSynthesis.speaking && !speechSynthesis.paused) {
+    speechSynthesis.pause(); btn.textContent = '▶'; return;
+  }
   if (speechSynthesis.paused) {
-    speechSynthesis.resume();
-    document.getElementById('audioPlay').textContent = '❚❚';
-    return;
+    speechSynthesis.resume(); btn.textContent = '❚❚'; return;
   }
   speechSynthesis.cancel();
   const paragraphs = State.currentArticle.en;
   let idx = 0;
   function speakNext() {
-    if (idx >= paragraphs.length) {
-      document.getElementById('audioPlay').textContent = '▶';
-      return;
-    }
+    if (idx >= paragraphs.length) { btn.textContent = '▶'; return; }
     const u = new SpeechSynthesisUtterance(paragraphs[idx]);
     u.lang = 'en-US';
     if (State.selectedVoice) {
       const v = voices.find(x => x.name === State.selectedVoice);
       if (v) u.voice = v;
     }
-    u.rate = State.speechRate;
+    u.rate = State.speechRate || 1.0;
     u.onboundary = e => {
       if (e.name !== 'word') return;
       const slice = paragraphs[idx].slice(0, e.charIndex);
       const wordIndex = (slice.match(/\S+/g) || []).length;
-      let globalIdx = 0;
-      for (let i = 0; i < idx; i++) globalIdx += (paragraphs[i].match(/\S+/g) || []).length;
-      globalIdx += wordIndex;
-      const wordSpans = document.querySelectorAll('.reader-text .word');
-      wordSpans.forEach(s => s.classList.remove('speaking'));
-      if (wordSpans[globalIdx]) {
-        wordSpans[globalIdx].classList.add('speaking');
-        wordSpans[globalIdx].scrollIntoView({behavior:'smooth', block:'center'});
-      }
+      let gi = 0;
+      for (let i = 0; i < idx; i++) gi += (paragraphs[i].match(/\S+/g) || []).length;
+      gi += wordIndex;
+      const spans = document.querySelectorAll('.reader-text .word');
+      spans.forEach(s => s.classList.remove('speaking'));
+      if (spans[gi]) { spans[gi].classList.add('speaking'); spans[gi].scrollIntoView({behavior:'smooth', block:'center'}); }
     };
     u.onend = () => {
-      idx += 1;
+      idx++;
       if (idx < paragraphs.length) speakNext();
-      else {
-        document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking'));
-        document.getElementById('audioPlay').textContent = '▶';
-      }
+      else { document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking')); btn.textContent = '▶'; }
     };
     speechSynthesis.speak(u);
   }
-  document.getElementById('audioPlay').textContent = '❚❚';
+  btn.textContent = '❚❚';
   speakNext();
 }
 
@@ -374,10 +490,7 @@ function setupRecording() {
   document.getElementById('recordBtn').addEventListener('click', async () => {
     const btn = document.getElementById('recordBtn');
     if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-      btn.classList.remove('recording');
-      btn.textContent = '🎙';
-      return;
+      mediaRecorder.stop(); btn.classList.remove('recording'); btn.textContent = '🎙'; return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -391,20 +504,13 @@ function setupRecording() {
         stream.getTracks().forEach(t => t.stop());
         toast('錄音完成 · 點 ▶︎ 播放');
       };
-      mediaRecorder.start();
-      btn.classList.add('recording');
-      btn.textContent = '◼';
+      mediaRecorder.start(); btn.classList.add('recording'); btn.textContent = '◼';
       toast('開始錄音 · 再點一次停止');
-    } catch (err) {
-      toast('無法存取麥克風：請允許權限');
-    }
+    } catch { toast('無法存取麥克風：請允許權限'); }
   });
 
   document.getElementById('audioPlayback').addEventListener('click', () => {
-    if (recordedAudio) {
-      recordedAudio.currentTime = 0;
-      recordedAudio.play();
-    }
+    if (recordedAudio) { recordedAudio.currentTime = 0; recordedAudio.play(); }
   });
 }
 

@@ -11,9 +11,14 @@ let dialogScenario = null;
 window.initSpeaking = function() {
   document.querySelectorAll('[data-mode]').forEach(card => {
     card.addEventListener('click', () => {
+      const mode = card.dataset.mode;
+      // 跟讀和個人話題分別算一次
+      if (mode === 'shadow' || mode === 'topic') {
+        if (!Access.tryUse('speak-' + mode)) return;
+      }
+      // dialog 模式在選具體情境時才算
       document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
-      const mode = card.dataset.mode;
       if (mode === 'shadow') renderShadowMode();
       else if (mode === 'topic') renderTopicMode();
       else if (mode === 'dialog') renderDialogMode();
@@ -245,6 +250,8 @@ function renderDialogMode() {
 
 async function startScenario(sid) {
   if (!checkApiKey()) return;
+  // 存取控制檢查
+  if (!Access.tryUse('speak-scenario-' + sid)) return;
   dialogScenario = SCENARIOS.find(s => s.id === sid);
   dialogHistory = [];
   const container = document.getElementById('speakingContent');

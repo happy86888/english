@@ -21,6 +21,11 @@ window.State = {
   completed: Store.get('completed', {}),
   streak: Store.get('streak', { count: 0, lastDate: null }),
   selectedVoice: Store.get('voice', null),
+  // TTS (Text-to-Speech)
+  ttsProvider: Store.get('tts_provider', 'browser'), // 'browser' | 'google'
+  googleTtsKey: Store.get('google_tts_key', ''),
+  ttsVoice: Store.get('tts_voice', 'en-US-Neural2-J'), // Google Cloud voice name
+  ttsGender: Store.get('tts_gender', 'MALE'),
   // AI provider: 'gemini' or 'groq'
   aiProvider: Store.get('ai_provider', 'gemini'),
   // Gemini

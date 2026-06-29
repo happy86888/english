@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script src="js/auth.js"></script>
 </head>
 <body>
 
@@ -25,6 +26,7 @@
     <button class="nav-btn" data-view="vocab">單字本</button>
     <button class="nav-btn" data-view="review">複習</button>
     <button class="nav-btn" data-view="settings">設定</button>
+    <span class="access-status" id="accessStatus" title="點擊查看詳情" style="cursor:pointer"></span>
     <button class="theme-toggle" id="themeToggle" title="切換主題">☾</button>
   </nav>
 </header>
@@ -132,7 +134,11 @@
       <button class="action-btn" id="addVideoBtn">＋ 加入自訂影片</button>
     </div>
     <div class="vocab-controls">
-      <button class="filter-btn active" data-vcat="fresh">🔥 每日新鮮</button>
+      <button class="filter-btn active" data-vcat="all">全部</button>
+      <button class="filter-btn" data-vcat="fresh">🔥 每日新鮮</button>
+      <button class="filter-btn" data-vcat="youtube">英文教學</button>
+      <button class="filter-btn" data-vcat="ted">TED 演講</button>
+      <button class="filter-btn" data-vcat="short">英文短片</button>
     </div>
     <div class="video-grid" id="videoGrid"></div>
   </section>
@@ -192,11 +198,51 @@
     <p class="section-sub">設定與資料管理</p>
 
     <div class="settings-section">
-      <h3>朗讀偏好 · Speech</h3>
+      <h3>我的<em style="color:var(--accent); font-style:italic">帳號</em></h3>
+      <div id="accountInfo"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3>朗讀偏好 · <em style="color:var(--accent); font-style:italic">Speech</em></h3>
       <div class="settings-row">
         <div class="settings-label">
-          選擇語音
-          <small>瀏覽器內建的英文發音</small>
+          TTS 提供者
+          <small>Google Cloud 聲音更自然；未設定 key 時自動使用瀏覽器內建</small>
+        </div>
+        <select id="ttsProviderSelect" class="search-input" style="max-width:220px">
+          <option value="browser">瀏覽器內建（免費）</option>
+          <option value="google">Google Cloud TTS（需 key）</option>
+        </select>
+      </div>
+      <div class="settings-row" id="googleTtsKeyRow">
+        <div class="settings-label">
+          Google Cloud TTS key
+          <small>跟 YouTube API 用同一個 Google Cloud 專案。啟用「Cloud Text-to-Speech API」即可用現有 key。</small>
+        </div>
+        <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap">
+          <span class="api-status" id="googleTtsStatus"></span>
+          <input type="password" class="search-input" id="googleTtsKeyInput" placeholder="AIza..." autocomplete="off" style="max-width:200px">
+          <button class="action-btn" id="saveGoogleTtsKeyBtn">儲存</button>
+        </div>
+      </div>
+      <div class="settings-row" id="googleTtsVoiceRow">
+        <div class="settings-label">
+          Google 聲音
+          <small>Neural2 最自然，Wavenet 也很好。D/J = 男聲，C/F = 女聲</small>
+        </div>
+        <select id="googleTtsVoiceSelect" class="search-input" style="max-width:260px">
+          <option value="en-US-Neural2-J">en-US-Neural2-J（男，推薦）</option>
+          <option value="en-US-Neural2-F">en-US-Neural2-F（女）</option>
+          <option value="en-US-Neural2-D">en-US-Neural2-D（男，沉穩）</option>
+          <option value="en-US-Neural2-C">en-US-Neural2-C（女，清亮）</option>
+          <option value="en-US-Wavenet-D">en-US-Wavenet-D（男）</option>
+          <option value="en-US-Wavenet-F">en-US-Wavenet-F（女）</option>
+        </select>
+      </div>
+      <div class="settings-row" id="browserVoiceRow">
+        <div class="settings-label">
+          瀏覽器聲音
+          <small>使用瀏覽器 TTS 時選擇的聲音</small>
         </div>
         <select id="voiceSelect" class="search-input" style="max-width:240px"></select>
       </div>
@@ -455,8 +501,11 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 <!-- Load order matters: data → storage → api → reader → vocab → videos → speaking → main -->
+<!-- Load order matters: data → storage → whitelist → access → api → ... → main -->
 <script src="js/data.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/whitelist.js"></script>
+<script src="js/access.js"></script>
 <script src="js/api.js"></script>
 <script src="js/reader.js"></script>
 <script src="js/vocab.js"></script>

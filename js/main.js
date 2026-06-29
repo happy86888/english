@@ -336,12 +336,71 @@ function refreshGroqStatus() {
   document.getElementById('groqKeyInput').value = State.groqKey ? '••••••••••••••' + State.groqKey.slice(-4) : '';
 }
 
+function refreshGoogleTtsStatus() {
+  const el = document.getElementById('googleTtsStatus');
+  if (!el) return;
+  el.classList.toggle('connected', !!State.googleTtsKey);
+  document.getElementById('googleTtsKeyInput').value = State.googleTtsKey ? '••••••••••••••' + State.googleTtsKey.slice(-4) : '';
+}
+
 function refreshYtApiStatus() {
   document.getElementById('ytApiStatus').classList.toggle('connected', !!State.youtubeKey);
   document.getElementById('ytApiKeyInput').value = State.youtubeKey ? '••••••••••••••' + State.youtubeKey.slice(-4) : '';
 }
 
+function renderAccountInfo() {
+  const el = document.getElementById('accountInfo');
+  if (!el) return;
+  const info = Access.getInfo();
+  let statusBadge;
+  if (info.isInWhitelist) {
+    statusBadge = `<span style="color:var(--success); font-weight:600">✓ 付費會員 · 無限制</span>`;
+  } else if (info.isInTrial) {
+    statusBadge = `<span style="color:var(--accent); font-weight:600">免費試用中</span> · 剩 <strong>${info.trialDaysLeft}</strong> 天`;
+  } else {
+    statusBadge = `<span style="color:var(--ink-muted)">每日限 ${info.dailyLimit} 次</span> · 今日已用 <strong>${info.todayUsed}</strong>/${info.dailyLimit}`;
+  }
+
+  el.innerHTML = `
+    <div class="settings-row">
+      <div class="settings-label">
+        使用狀態
+        <small>試用 30 天 · 之後每日限用 ${info.dailyLimit} 個不同內容</small>
+      </div>
+      <div style="font-size:0.95rem">${statusBadge}</div>
+    </div>
+    <div class="settings-row" style="display:block">
+      <div class="settings-label" style="margin-bottom:0.5rem">
+        裝置 ID
+        <small>付費後請把這個 ID 複製傳給站長</small>
+      </div>
+      <div style="display:flex; gap:0.5rem; align-items:center">
+        <code style="flex:1; background:var(--bg); padding:0.55rem 0.7rem; border-radius:6px; border:1px solid var(--line); word-break:break-all; font-size:0.78rem; font-family:'Inter',monospace">${escapeHTML(info.deviceId)}</code>
+        <button class="action-btn" id="copyDeviceIdBtn" style="font-size:0.85rem">複製</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <div class="settings-label">
+        想要無限制?
+        <small>聯絡站長付費後即可解鎖</small>
+      </div>
+      <div style="font-family:monospace; font-size:1rem; color:var(--accent); font-weight:600">${escapeHTML(info.lineId)}</div>
+    </div>
+  `;
+
+  document.getElementById('copyDeviceIdBtn').onclick = () => {
+    navigator.clipboard.writeText(info.deviceId).then(() => {
+      const btn = document.getElementById('copyDeviceIdBtn');
+      btn.textContent = '✓ 已複製';
+      setTimeout(() => btn.textContent = '複製', 1800);
+    }).catch(() => toast('複製失敗,請長按裝置 ID 手動複製'));
+  };
+}
+
 function setupSettings() {
+  // Account info section
+  renderAccountInfo();
+
   refreshApiStatus();
   refreshGroqStatus();
 
@@ -451,6 +510,48 @@ function setupSettings() {
     Store.set('voice', e.target.value);
   });
 
+  // TTS provider
+  const ttsProvSel = document.getElementById('ttsProviderSelect');
+  ttsProvSel.value = State.ttsProvider || 'browser';
+  updateTtsRows();
+  ttsProvSel.addEventListener('change', e => {
+    State.ttsProvider = e.target.value;
+    Store.set('tts_provider', e.target.value);
+    updateTtsRows();
+    toast(e.target.value === 'google' ? 'Google Cloud TTS 已啟用' : '已切換回瀏覽器內建聲音');
+  });
+
+  function updateTtsRows() {
+    const isGoogle = (State.ttsProvider === 'google');
+    document.getElementById('googleTtsKeyRow').style.display = isGoogle ? '' : 'none';
+    document.getElementById('googleTtsVoiceRow').style.display = isGoogle ? '' : 'none';
+    document.getElementById('browserVoiceRow').style.display = isGoogle ? 'none' : '';
+  }
+
+  // Google TTS key
+  refreshGoogleTtsStatus();
+  document.getElementById('googleTtsKeyInput').addEventListener('focus', e => {
+    if (State.googleTtsKey && e.target.value.startsWith('•')) e.target.value = '';
+  });
+  document.getElementById('saveGoogleTtsKeyBtn').onclick = () => {
+    const v = document.getElementById('googleTtsKeyInput').value.trim();
+    if (v.startsWith('•')) return;
+    State.googleTtsKey = v;
+    Store.set('google_tts_key', v);
+    refreshGoogleTtsStatus();
+    toast(v ? '已儲存 Google TTS key' : '已清除 Google TTS key');
+  };
+
+  // Google TTS voice
+  document.getElementById('googleTtsVoiceSelect').value = State.ttsVoice || 'en-US-Neural2-J';
+  document.getElementById('googleTtsVoiceSelect').addEventListener('change', e => {
+    State.ttsVoice = e.target.value;
+    State.ttsGender = e.target.value.match(/-(J|D)$/) ? 'MALE' : 'FEMALE';
+    Store.set('tts_voice', State.ttsVoice);
+    Store.set('tts_gender', State.ttsGender);
+    toast('聲音已切換，下次朗讀生效');
+  });
+
   // Backup
   document.getElementById('exportBtn').onclick = () => {
     const data = {
@@ -550,5 +651,20 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAiReviewModal();
   setupSettings();
 
+  // Access status indicator
+  updateAccessStatus();
+  document.getElementById('accessStatus').addEventListener('click', () => {
+    Access.showPaywall();
+  });
+
   renderDashboard();
 });
+
+window.updateAccessStatus = function() {
+  const el = document.getElementById('accessStatus');
+  if (!el) return;
+  const info = Access.getInfo();
+  el.textContent = info.statusText;
+  el.classList.toggle('unlimited', info.isUnlimited);
+  el.classList.toggle('limited', !info.isUnlimited);
+};

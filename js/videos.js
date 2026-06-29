@@ -5,7 +5,7 @@
    - 「每日新鮮」分類從 YouTube Data API 即時搜尋當天熱門影片
    ============================================================ */
 
-let videoFilter = 'fresh';
+let videoFilter = 'all';
 
 window.renderVideos = function() {
   const grid = document.getElementById('videoGrid');
@@ -203,6 +203,8 @@ async function searchYouTube(query, level) {
 }
 
 function openFreshVideo(v) {
+  // 存取控制檢查
+  if (!Access.tryUse('fresh-video-' + v.youtubeId)) return;
   // 用一般 openVideo 流程播放，但沒有逐字稿
   const youtubeUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(v.youtubeId)}`;
   const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(v.youtubeId)}?autoplay=1&rel=0`;
@@ -234,6 +236,8 @@ window.openVideo = function(id) {
   const all = [...BUILTIN_VIDEOS, ...(State.customVideos || [])];
   const v = all.find(x => x.id === id);
   if (!v) return;
+  // 存取控制檢查
+  if (!Access.tryUse('video-' + id)) return;
 
   const youtubeUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(v.youtubeId)}`;
   const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(v.youtubeId)}?autoplay=1&rel=0`;
