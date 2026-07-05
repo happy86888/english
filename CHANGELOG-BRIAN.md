@@ -35,3 +35,9 @@
 - 移除 OpenRouter optional headers，避免中文網域、中文網站標題或部署環境字串造成 fetch header 編碼錯誤。
 - Groq / OpenRouter 的 Bearer token 送出前會自動清除非 ASCII 字元，避免 API key 複製時帶到中文註記或不可見字元。
 - 保留無通行碼設定。
+
+## 2026-07-05 v3 deployment fix
+- Physically removed `js/auth.js` from the package, so the old passcode overlay cannot load even if an old index references it.
+- Added cache-busting query strings to CSS and all JS files.
+- Added build marker: `20260705-v3-no-password-cachebust`.
+- Added stricter OpenRouter/Groq API key validation before `fetch`.

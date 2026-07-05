@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
+  <meta name="brian-build" content="20260705-v3-no-password-cachebust">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>晨讀 · Dawn Reader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20260705-v3">
 </head>
 <body>
 
@@ -527,16 +528,16 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 <!-- Load order matters: data → storage → api → reader → vocab → videos → speaking → main -->
-<!-- Load order matters: data → storage → whitelist → access → api → ... → main -->
-<script src="js/data.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/whitelist.js"></script>
-<script src="js/access.js"></script>
-<script src="js/api.js"></script>
-<script src="js/reader.js"></script>
-<script src="js/vocab.js"></script>
-<script src="js/videos.js"></script>
-<script src="js/speaking.js"></script>
-<script src="js/main.js"></script>
+<!-- Build 20260705-v3: no auth.js, cache-busted assets. Load order matters: data → storage → whitelist → access → api → ... → main -->
+<script src="js/data.js?v=20260705-v3"></script>
+<script src="js/storage.js?v=20260705-v3"></script>
+<script src="js/whitelist.js?v=20260705-v3"></script>
+<script src="js/access.js?v=20260705-v3"></script>
+<script src="js/api.js?v=20260705-v3"></script>
+<script src="js/reader.js?v=20260705-v3"></script>
+<script src="js/vocab.js?v=20260705-v3"></script>
+<script src="js/videos.js?v=20260705-v3"></script>
+<script src="js/speaking.js?v=20260705-v3"></script>
+<script src="js/main.js?v=20260705-v3"></script>
 </body>
 </html>

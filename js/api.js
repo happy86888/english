@@ -20,6 +20,31 @@ function cleanBearerToken(value) {
   return raw.replace(/[^\x21-\x7E]/g, '');
 }
 
+
+function assertAsciiHeaderValue(name, value) {
+  const text = String(value || '');
+  if (/[^\x00-\xFF]/.test(text)) {
+    throw new Error(name + ' header contains non-Latin characters before fetch. Please re-save the API key using only the raw key text.');
+  }
+  return text;
+}
+
+function getCleanOpenRouterKey() {
+  const key = cleanBearerToken(State.openrouterKey);
+  if (!key || !key.startsWith('sk-or-v1-')) {
+    throw new Error('OpenRouter API key 格式不正確，請只貼上 sk-or-v1- 開頭的 key。');
+  }
+  return key;
+}
+
+function getCleanGroqKey() {
+  const key = cleanBearerToken(State.groqKey);
+  if (!key || !key.startsWith('gsk_')) {
+    throw new Error('Groq API key 格式不正確，請只貼上 gsk_ 開頭的 key。');
+  }
+  return key;
+}
+
 window.checkApiKey = function() {
   const provider = State.aiProvider || 'gemini';
   const meta = AI_PROVIDERS[provider] || AI_PROVIDERS.gemini;
@@ -102,7 +127,7 @@ async function callGroq(prompt, opts) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cleanBearerToken(State.groqKey)}`
+      'Authorization': assertAsciiHeaderValue('Authorization', 'Bearer ' + getCleanGroqKey())
     },
     body: JSON.stringify(body)
   });
@@ -157,7 +182,7 @@ async function callOpenRouter(prompt, opts) {
   // localized site names, or user-entered notes into headers.
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${cleanBearerToken(State.openrouterKey)}`
+    'Authorization': assertAsciiHeaderValue('Authorization', 'Bearer ' + getCleanOpenRouterKey())
   };
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
