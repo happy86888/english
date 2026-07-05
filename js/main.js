@@ -89,6 +89,49 @@ window.renderLibrary = function() {
   attachArticleClickHandlers(grid);
 };
 
+
+function pickOne(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function buildCreativeBrief(level, topic, source) {
+  const formats = [
+    'micro-essay with one concrete image in the opening sentence',
+    'quiet narrative that follows one person through a small decision',
+    'magazine-style explainer built around a surprising contrast',
+    'reflective travel-note style piece with sensory detail',
+    'workplace or daily-life scene that reveals a larger idea',
+    'science-for-curious-adults style article with one clear analogy'
+  ];
+  const structures = [
+    'start in the middle of a scene, then widen into the idea, then end with a gentle turn',
+    'begin with a common assumption, challenge it, and close with a practical insight',
+    'use problem → observation → example → takeaway, without sounding like a lesson plan',
+    'use before/after contrast across the paragraphs',
+    'use one recurring object or image as a thread across the passage'
+  ];
+  const banned = [
+    'In today’s world', 'Nowadays', 'This article will', 'Imagine a world',
+    'Whether you are', 'It is important to', 'From ancient times',
+    'There are many reasons', 'In conclusion', 'Overall'
+  ];
+  const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const focusLine = topic
+    ? `Topic focus: "${topic}". Choose a specific, non-obvious angle instead of a generic overview.`
+    : 'Topic selection: choose a specific adult-interest angle, not a broad category. Avoid repeating common AI topics unless the angle is fresh.';
+  return `Creative brief seed: ${seed}
+Source type: ${source}
+${focusLine}
+Narrative format: ${pickOne(formats)}.
+Article structure: ${pickOne(structures)}.
+Level adaptation: keep the language appropriate for ${level}, but do not make the thinking childish.
+Style constraints:
+- Each paragraph must have a different job; do not repeat the same logic in every paragraph.
+- Use one concrete detail, one mild surprise, and one human observation.
+- Avoid generic motivational advice and textbook explanations.
+- Do not use these openings or phrases: ${banned.map(x => '"' + x + '"').join(', ')}.`;
+}
+
 /* ---------- AI Generate Article (modal) ---------- */
 function openGenModal() {
   if (!checkApiKey()) return;
@@ -135,6 +178,7 @@ function setupGenerateModal() {
       B1: 'B1 (intermediate). Common vocabulary with some less frequent words. Mix of sentence lengths. All tenses allowed but no rare grammar.',
       B2: 'B2 (upper-intermediate). Richer vocabulary including some abstract terms. Varied sentence structure. Some idioms okay if context makes them clear.'
     };
+    const creativeBrief = buildCreativeBrief(level, topic, source);
 
     let prompt;
     let wikiSource = null;
@@ -157,6 +201,8 @@ Requirements:
 - Length: about ${targetWords} words across 3-4 paragraphs.
 - Keep the factual content faithful to the original, but rewrite for readability and language-learner clarity.
 - Tone: warm and engaging, like a well-written magazine paragraph.
+- Apply this creative direction so repeated generations do not feel formulaic:
+${creativeBrief}
 
 Then provide:
 - A short English title (3-6 words).
@@ -188,6 +234,8 @@ Requirements:
 - ${topicLine}
 - Tone: thoughtful, slightly literary, engaging — not textbook-dry.
 - Show a small specific scene or insight. Avoid clichéd "AI sample text" feel.
+- Apply this creative direction so repeated generations do not feel formulaic:
+${creativeBrief}
 
 Then provide:
 - A short English title (3-6 words) and Traditional Chinese title.
@@ -336,6 +384,13 @@ function refreshGroqStatus() {
   document.getElementById('groqKeyInput').value = State.groqKey ? '••••••••••••••' + State.groqKey.slice(-4) : '';
 }
 
+function refreshOpenrouterStatus() {
+  const el = document.getElementById('openrouterStatus');
+  if (!el) return;
+  el.classList.toggle('connected', !!State.openrouterKey);
+  document.getElementById('openrouterKeyInput').value = State.openrouterKey ? '••••••••••••••' + State.openrouterKey.slice(-4) : '';
+}
+
 function refreshGoogleTtsStatus() {
   const el = document.getElementById('googleTtsStatus');
   if (!el) return;
@@ -403,14 +458,15 @@ function setupSettings() {
 
   refreshApiStatus();
   refreshGroqStatus();
+  refreshOpenrouterStatus();
 
   // AI provider selector
   document.getElementById('aiProviderSelect').value = State.aiProvider || 'gemini';
   document.getElementById('aiProviderSelect').addEventListener('change', e => {
     State.aiProvider = e.target.value;
     Store.set('ai_provider', e.target.value);
-    const name = e.target.value === 'groq' ? 'Groq (Llama)' : 'Google Gemini';
-    toast(`AI 提供者已切換為 ${name}`);
+    const names = { gemini: 'Google Gemini', groq: 'Groq (Llama)', openrouter: 'OpenRouter' };
+    toast(`AI 提供者已切換為 ${names[e.target.value] || e.target.value}`);
   });
 
   // Gemini key
@@ -459,6 +515,30 @@ function setupSettings() {
   document.getElementById('groqModelSelect').addEventListener('change', e => {
     State.groqModel = e.target.value;
     Store.set('groq_model', e.target.value);
+  });
+
+  // OpenRouter key
+  document.getElementById('openrouterKeyInput').addEventListener('focus', e => {
+    if (State.openrouterKey && e.target.value.startsWith('•')) e.target.value = '';
+  });
+
+  document.getElementById('saveOpenrouterKeyBtn').onclick = () => {
+    const v = document.getElementById('openrouterKeyInput').value.trim();
+    if (v.startsWith('•')) return;
+    if (v && !v.startsWith('sk-or-')) {
+      toast('OpenRouter API key 通常以 sk-or- 開頭');
+      return;
+    }
+    State.openrouterKey = v;
+    Store.set('openrouter_key', v);
+    refreshOpenrouterStatus();
+    toast(v ? '已儲存 OpenRouter key' : '已清除 OpenRouter key');
+  };
+
+  document.getElementById('openrouterModelSelect').value = State.openrouterModel || '~anthropic/claude-sonnet-latest';
+  document.getElementById('openrouterModelSelect').addEventListener('change', e => {
+    State.openrouterModel = e.target.value;
+    Store.set('openrouter_model', e.target.value);
   });
 
   /* YouTube API key setup */
@@ -609,10 +689,12 @@ function setupSettings() {
       State.streak = { count: 0, lastDate: null };
       State.apiKey = '';
       State.groqKey = '';
+      State.openrouterKey = '';
       State.youtubeKey = '';
       State.ytCachedVideos = { date: null, videos: [] };
       refreshApiStatus();
       refreshGroqStatus();
+      refreshOpenrouterStatus();
       refreshYtApiStatus();
       toast('已清除所有資料');
       renderDashboard();

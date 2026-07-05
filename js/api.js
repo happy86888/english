@@ -1,18 +1,23 @@
 /* ============================================================
-   api.js · AI 呼叫，支援 Gemini 與 Groq 雙提供者
+   api.js · AI 呼叫，支援 Gemini、Groq、OpenRouter 多提供者
    API key 從不離開使用者的瀏覽器。
    ============================================================ */
 
+const AI_PROVIDERS = {
+  gemini: { name: 'Google Gemini', keyField: 'apiKey', inputId: 'apiKeyInput' },
+  groq: { name: 'Groq', keyField: 'groqKey', inputId: 'groqKeyInput' },
+  openrouter: { name: 'OpenRouter', keyField: 'openrouterKey', inputId: 'openrouterKeyInput' }
+};
+
 window.checkApiKey = function() {
   const provider = State.aiProvider || 'gemini';
-  const hasKey = provider === 'groq' ? !!State.groqKey : !!State.apiKey;
+  const meta = AI_PROVIDERS[provider] || AI_PROVIDERS.gemini;
+  const hasKey = !!State[meta.keyField];
   if (!hasKey) {
-    const providerName = provider === 'groq' ? 'Groq' : 'Gemini';
-    toast(`請先到「設定」填入 ${providerName} API key`);
+    toast(`請先到「設定」填入 ${meta.name} API key`);
     showView('settings');
     setTimeout(() => {
-      const inputId = provider === 'groq' ? 'groqKeyInput' : 'apiKeyInput';
-      const input = document.getElementById(inputId);
+      const input = document.getElementById(meta.inputId);
       if (input) input.focus();
     }, 400);
     return false;
@@ -23,6 +28,7 @@ window.checkApiKey = function() {
 window.callAI = async function(prompt, opts = {}) {
   const provider = State.aiProvider || 'gemini';
   if (provider === 'groq') return callGroq(prompt, opts);
+  if (provider === 'openrouter') return callOpenRouter(prompt, opts);
   return callGemini(prompt, opts);
 };
 
@@ -111,6 +117,62 @@ async function callGroq(prompt, opts) {
     }
     try { return JSON.parse(text); }
     catch (err) { throw new Error('Groq JSON 解析失敗：' + err.message.slice(0, 100)); }
+  }
+  return text;
+}
+
+/* ---------- OpenRouter (OpenAI-compatible aggregator) ---------- */
+async function callOpenRouter(prompt, opts) {
+  const expectJSON = opts.json !== false;
+  const systemText = opts.systemInstruction
+    || 'You are an expert English reading-content editor for Mandarin-speaking adult learners in Taiwan. Use Traditional Chinese (繁體中文 / 台灣用語) for Chinese translations. When asked for JSON, respond ONLY with valid JSON, no surrounding prose or markdown fences.';
+
+  const body = {
+    model: State.openrouterModel || '~anthropic/claude-sonnet-latest',
+    messages: [
+      { role: 'system', content: systemText },
+      { role: 'user', content: prompt }
+    ],
+    temperature: opts.temperature ?? 0.95,
+    top_p: opts.top_p ?? 0.92,
+    max_tokens: opts.max_tokens ?? 2200
+  };
+  if (expectJSON) {
+    body.response_format = { type: 'json_object' };
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${State.openrouterKey}`,
+    'X-Title': document.title || 'Dawn Reader'
+  };
+  if (location.origin && location.origin !== 'null') headers['HTTP-Referer'] = location.origin;
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenRouter ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  let text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('OpenRouter 沒有回傳內容');
+
+  if (expectJSON) {
+    text = text.trim();
+    if (text.startsWith('```')) {
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace > 0 || (lastBrace > 0 && lastBrace < text.length - 1)) {
+      text = text.slice(firstBrace, lastBrace + 1);
+    }
+    try { return JSON.parse(text); }
+    catch (err) { throw new Error('OpenRouter JSON 解析失敗：' + err.message.slice(0, 100)); }
   }
   return text;
 }

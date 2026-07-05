@@ -287,6 +287,33 @@
         <select id="aiProviderSelect" class="search-input" style="max-width:220px">
           <option value="gemini">Google Gemini</option>
           <option value="groq">Groq (Llama)</option>
+          <option value="openrouter">OpenRouter（多模型）</option>
+        </select>
+      </div>
+    </div>
+
+
+    <div class="settings-section">
+      <h3>OpenRouter API <em style="color:var(--accent); font-style:italic">key</em></h3>
+      <p style="color:var(--ink-muted); font-size:0.9rem; margin-bottom:0.8rem">
+        OpenRouter 可以用同一把 key 串接 OpenAI、Anthropic Claude、Google Gemini 等多種模型。
+        若覺得 Groq 產文邏輯太像，建議先用 Claude Sonnet Latest 或 OpenAI GPT Latest。
+      </p>
+      <div class="api-key-row">
+        <span class="api-status" id="openrouterStatus"></span>
+        <input type="password" class="search-input" id="openrouterKeyInput" placeholder="sk-or-v1-..." autocomplete="off">
+        <button class="action-btn" id="saveOpenrouterKeyBtn">儲存</button>
+      </div>
+      <div class="settings-row" style="margin-top:1rem">
+        <div class="settings-label">
+          模型
+          <small>短文品質優先建議 Claude Sonnet Latest；想追最新 OpenAI 則選 GPT Latest</small>
+        </div>
+        <select id="openrouterModelSelect" class="search-input" style="max-width:280px">
+          <option value="~anthropic/claude-sonnet-latest" selected>Claude Sonnet Latest（短文推薦）</option>
+          <option value="~openai/gpt-latest">OpenAI GPT Latest（品質穩）</option>
+          <option value="anthropic/claude-sonnet-5">Claude Sonnet 5</option>
+          <option value="google/gemini-2.5-pro">Gemini 2.5 Pro（經 OpenRouter）</option>
         </select>
       </div>
     </div>

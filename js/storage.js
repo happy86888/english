@@ -26,7 +26,7 @@ window.State = {
   googleTtsKey: Store.get('google_tts_key', ''),
   ttsVoice: Store.get('tts_voice', 'en-US-Neural2-J'), // Google Cloud voice name
   ttsGender: Store.get('tts_gender', 'MALE'),
-  // AI provider: 'gemini' or 'groq'
+  // AI provider: 'gemini' | 'groq' | 'openrouter'
   aiProvider: Store.get('ai_provider', 'gemini'),
   // Gemini
   apiKey: Store.get('api_key', ''),
@@ -34,6 +34,9 @@ window.State = {
   // Groq
   groqKey: Store.get('groq_key', ''),
   groqModel: Store.get('groq_model', 'llama-3.3-70b-versatile'),
+  // OpenRouter
+  openrouterKey: Store.get('openrouter_key', ''),
+  openrouterModel: Store.get('openrouter_model', '~anthropic/claude-sonnet-latest'),
   // YouTube
   youtubeKey: Store.get('youtube_key', ''),
   ytSearchKeywords: Store.get('yt_keywords', {
