@@ -141,10 +141,14 @@ async function callOpenRouter(prompt, opts) {
     body.response_format = { type: 'json_object' };
   }
 
+  // Fetch headers can only contain ISO-8859-1 / ASCII-safe characters.
+  // document.title may include Chinese characters, which causes:
+  // "String contains non ISO-8859-1 code point" before the request is sent.
+  const safeOpenRouterKey = String(State.openrouterKey || '').trim();
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${State.openrouterKey}`,
-    'X-Title': document.title || 'Dawn Reader'
+    'Authorization': `Bearer ${safeOpenRouterKey}`,
+    'X-Title': 'Dawn Reader'
   };
   if (location.origin && location.origin !== 'null') headers['HTTP-Referer'] = location.origin;
 

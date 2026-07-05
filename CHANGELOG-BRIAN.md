@@ -19,3 +19,14 @@
 - `js/storage.js`
 - `js/api.js`
 - `js/main.js`
+
+## 2026-07-05 · 修正 OpenRouter Header 錯誤
+
+- 修正 OpenRouter 呼叫時，`X-Title` 使用中文網頁標題造成瀏覽器 `fetch` 失敗的問題。
+- 將 OpenRouter `X-Title` 固定為 ASCII 字串 `Dawn Reader`。
+- API key 送出前會先 `trim()`，避免複製貼上時多出空白造成驗證失敗。
+
+## 2026-07-05 通行碼移除
+- 移除 `index.html` 對 `js/auth.js` 的載入。
+- 網站開啟後不再要求輸入通行碼。
+- `js/auth.js` 檔案保留但未啟用，未來需要時可重新接回。
