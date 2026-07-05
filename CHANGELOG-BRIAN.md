@@ -30,3 +30,8 @@
 - 移除 `index.html` 對 `js/auth.js` 的載入。
 - 網站開啟後不再要求輸入通行碼。
 - `js/auth.js` 檔案保留但未啟用，未來需要時可重新接回。
+
+## 2026-07-05 · Header encoding 強化修正
+- 移除 OpenRouter optional headers，避免中文網域、中文網站標題或部署環境字串造成 fetch header 編碼錯誤。
+- Groq / OpenRouter 的 Bearer token 送出前會自動清除非 ASCII 字元，避免 API key 複製時帶到中文註記或不可見字元。
+- 保留無通行碼設定。

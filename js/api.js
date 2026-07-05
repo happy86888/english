@@ -9,6 +9,17 @@ const AI_PROVIDERS = {
   openrouter: { name: 'OpenRouter', keyField: 'openrouterKey', inputId: 'openrouterKeyInput' }
 };
 
+function cleanBearerToken(value) {
+  const raw = String(value || '').trim();
+  const openrouter = raw.match(/sk-or-v1-[A-Za-z0-9_-]+/);
+  if (openrouter) return openrouter[0];
+  const groq = raw.match(/gsk_[A-Za-z0-9_-]+/);
+  if (groq) return groq[0];
+  const openaiLike = raw.match(/sk-[A-Za-z0-9_-]+/);
+  if (openaiLike) return openaiLike[0];
+  return raw.replace(/[^\x21-\x7E]/g, '');
+}
+
 window.checkApiKey = function() {
   const provider = State.aiProvider || 'gemini';
   const meta = AI_PROVIDERS[provider] || AI_PROVIDERS.gemini;
@@ -91,7 +102,7 @@ async function callGroq(prompt, opts) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${State.groqKey}`
+      'Authorization': `Bearer ${cleanBearerToken(State.groqKey)}`
     },
     body: JSON.stringify(body)
   });
@@ -141,16 +152,13 @@ async function callOpenRouter(prompt, opts) {
     body.response_format = { type: 'json_object' };
   }
 
-  // Fetch headers can only contain ISO-8859-1 / ASCII-safe characters.
-  // document.title may include Chinese characters, which causes:
-  // "String contains non ISO-8859-1 code point" before the request is sent.
-  const safeOpenRouterKey = String(State.openrouterKey || '').trim();
+  // Keep every fetch header ASCII-only. Browser fetch rejects non-Latin-1
+  // header values before the request is sent. Do not pass document.title,
+  // localized site names, or user-entered notes into headers.
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${safeOpenRouterKey}`,
-    'X-Title': 'Dawn Reader'
+    'Authorization': `Bearer ${cleanBearerToken(State.openrouterKey)}`
   };
-  if (location.origin && location.origin !== 'null') headers['HTTP-Referer'] = location.origin;
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
