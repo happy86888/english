@@ -46,7 +46,7 @@ window.State = {
   }),
   ytLevel: Store.get('yt_level', 'B1'),
   ytCachedVideos: Store.get('yt_cached', { date: null, videos: [] }),
-  speechRate: 0.9,
+  speechRate: parseFloat(Store.get('speech_rate', 0.9)) || 0.9,
   currentArticle: null,
 };
 

@@ -3,6 +3,60 @@
    ============================================================ */
 
 /* ---------- Article reader ---------- */
+
+let readerSentenceList = [];
+let currentSentenceIndex = 0;
+
+function splitIntoSentences(paragraph) {
+  const text = String(paragraph || '').replace(/\s+/g, ' ').trim();
+  if (!text) return [];
+  const matches = text.match(/[^.!?]+(?:[.!?]+[\"’”)]*|$)/g) || [text];
+  const cleaned = matches.map(x => x.trim()).filter(Boolean);
+  return cleaned.length ? cleaned : [text];
+}
+
+function rebuildReaderSentences(article) {
+  readerSentenceList = [];
+  let sentenceIndex = 0;
+  const paragraphsHTML = (article.en || []).map((paragraph, paragraphIndex) => {
+    const sentences = splitIntoSentences(paragraph);
+    const sentenceHTML = sentences.map(sentence => {
+      const idx = sentenceIndex++;
+      readerSentenceList.push({ text: sentence, paragraphIndex, index: idx });
+      return `<span class="reader-sentence" data-sentence-index="${idx}">${tokenize(sentence)}</span>`;
+    }).join(' ');
+    return `<p>${sentenceHTML}</p>`;
+  });
+  currentSentenceIndex = 0;
+  return paragraphsHTML.join('');
+}
+
+function clearSentenceHighlights() {
+  document.querySelectorAll('.reader-sentence').forEach(s => s.classList.remove('active', 'queued'));
+  document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking'));
+}
+
+function highlightCurrentSentence(scroll = false) {
+  clearSentenceHighlights();
+  const el = document.querySelector(`.reader-sentence[data-sentence-index="${currentSentenceIndex}"]`);
+  if (el) {
+    el.classList.add('active');
+    if (scroll) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  updateAudioSentenceStatus();
+}
+
+function updateAudioSentenceStatus() {
+  const el = document.getElementById('audioSentenceStatus');
+  if (!el) return;
+  const total = readerSentenceList.length || 0;
+  if (!total) {
+    el.textContent = '尚無句子';
+    return;
+  }
+  el.textContent = `第 ${Math.min(currentSentenceIndex + 1, total)} / ${total} 句`;
+}
+
 window.openArticle = function(id, highlightWord) {
   const article = getAllArticles().find(a => a.id === id);
   if (!article) return;
@@ -24,7 +78,8 @@ window.openArticle = function(id, highlightWord) {
   }
 
   const text = document.getElementById('readerText');
-  text.innerHTML = article.en.map(p => '<p>' + tokenize(p) + '</p>').join('');
+  text.innerHTML = rebuildReaderSentences(article);
+  updateAudioSentenceStatus();
 
   const zh = document.getElementById('readerZh');
   zh.innerHTML = article.zh.map(p => '<p>'+escapeHTML(p)+'</p>').join('');
@@ -32,8 +87,27 @@ window.openArticle = function(id, highlightWord) {
   document.getElementById('toggleZh').textContent = '顯示中文';
   document.getElementById('toggleZh').classList.remove('active');
 
+  const phrases = document.getElementById('readerPhrases');
+  if (phrases) {
+    const list = Array.isArray(article.usefulPhrases) ? article.usefulPhrases : [];
+    phrases.innerHTML = list.length ? `
+      <h3>Useful <em>phrases</em></h3>
+      <div class="phrase-list">
+        ${list.slice(0, 8).map(item => `
+          <div class="phrase-card">
+            <strong>${escapeHTML(item.phrase || '')}</strong>
+            <p>${escapeHTML(item.zh || '')}</p>
+            ${item.example ? `<small>${escapeHTML(item.example)}</small>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+  }
+
+  stopArticleAudio();
   document.getElementById('audioBar').classList.remove('visible');
   document.getElementById('toggleAudio').classList.remove('active');
+  document.getElementById('audioPlay').textContent = '▶';
   document.getElementById('quizSection').classList.remove('visible');
   document.getElementById('toggleQuiz').classList.remove('active');
 
@@ -356,6 +430,22 @@ window.speakWord = async function(word) {
 let articleAudioPlaying = false;
 let articleAudioPaused = false;
 let currentArticleAudio = null;
+let autoContinueArticleAudio = true;
+
+function stopArticleAudio() {
+  articleAudioPlaying = false;
+  articleAudioPaused = false;
+  autoContinueArticleAudio = true;
+  if (currentArticleAudio) {
+    currentArticleAudio.pause();
+    currentArticleAudio = null;
+  }
+  speechSynthesis.cancel();
+  const btn = document.getElementById('audioPlay');
+  if (btn) btn.textContent = '▶';
+  clearSentenceHighlights();
+  updateAudioSentenceStatus();
+}
 
 window.initAudioBar = function() {
   document.getElementById('toggleZh').onclick = () => {
@@ -369,6 +459,7 @@ window.initAudioBar = function() {
   document.getElementById('toggleAudio').onclick = () => {
     document.getElementById('audioBar').classList.toggle('visible');
     document.getElementById('toggleAudio').classList.toggle('active');
+    updateAudioSentenceStatus();
   };
 
   document.getElementById('toggleQuiz').onclick = () => {
@@ -379,12 +470,16 @@ window.initAudioBar = function() {
   };
 
   document.getElementById('audioPlay').onclick = handlePlayButton;
+  document.getElementById('audioPrev')?.addEventListener('click', () => jumpSentence(-1, true));
+  document.getElementById('audioRepeat')?.addEventListener('click', () => repeatCurrentSentence(true));
+  document.getElementById('audioNext')?.addEventListener('click', () => jumpSentence(1, true));
 
   document.querySelectorAll('.speed-btn').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       State.speechRate = parseFloat(b.dataset.speed);
+      Store.set('speech_rate', String(State.speechRate));
     });
   });
 
@@ -392,94 +487,159 @@ window.initAudioBar = function() {
 };
 
 function handlePlayButton() {
-  if (!State.currentArticle) return;
+  if (!State.currentArticle || !readerSentenceList.length) return;
   const btn = document.getElementById('audioPlay');
 
-  if (State.ttsProvider === 'google' && State.googleTtsKey) {
-    if (articleAudioPlaying && !articleAudioPaused) {
-      if (currentArticleAudio) { currentArticleAudio.pause(); articleAudioPaused = true; btn.textContent = '▶'; }
-      return;
-    }
-    if (articleAudioPaused && currentArticleAudio) {
-      currentArticleAudio.play(); articleAudioPaused = false; btn.textContent = '❚❚';
-      return;
-    }
-    playArticleGoogle();
+  if (articleAudioPlaying && !articleAudioPaused) {
+    if (State.ttsProvider === 'google' && State.googleTtsKey && currentArticleAudio) currentArticleAudio.pause();
+    else if (speechSynthesis.speaking && !speechSynthesis.paused) speechSynthesis.pause();
+    articleAudioPaused = true;
+    btn.textContent = '▶';
     return;
   }
-  playArticleBrowser();
+
+  if (articleAudioPaused) {
+    if (State.ttsProvider === 'google' && State.googleTtsKey && currentArticleAudio) currentArticleAudio.play().catch(() => {});
+    else if (speechSynthesis.paused) speechSynthesis.resume();
+    articleAudioPaused = false;
+    articleAudioPlaying = true;
+    btn.textContent = '❚❚';
+    return;
+  }
+
+  autoContinueArticleAudio = true;
+  playSentence(currentSentenceIndex, true);
 }
 
-async function playArticleGoogle() {
-  if (!State.currentArticle) return;
-  const btn = document.getElementById('audioPlay');
-  const paragraphs = State.currentArticle.en;
-  btn.textContent = '…'; btn.disabled = true;
-  articleAudioPlaying = true; articleAudioPaused = false;
-
-  try {
-    const rate = State.speechRate || 1.0;
-    const audioList = await Promise.all(paragraphs.map(p => googleTTS(p, rate)));
-    btn.disabled = false; btn.textContent = '❚❚';
-    let idx = 0;
-    function playNext() {
-      if (!articleAudioPlaying || idx >= audioList.length) {
-        btn.textContent = '▶'; articleAudioPlaying = false; return;
-      }
-      const audio = new Audio('data:audio/mp3;base64,' + audioList[idx]);
-      currentArticleAudio = audio;
-      audio.onended = () => { idx++; if (!articleAudioPaused) playNext(); };
-      audio.onerror = () => { idx++; playNext(); };
-      audio.play().catch(() => { btn.textContent = '▶'; articleAudioPlaying = false; });
-    }
-    playNext();
-  } catch (err) {
-    btn.disabled = false; btn.textContent = '▶'; articleAudioPlaying = false;
-    toast('Google TTS 失敗，切換瀏覽器聲音');
-    playArticleBrowser();
+function jumpSentence(delta, shouldPlay) {
+  if (!readerSentenceList.length) return;
+  const wasPlaying = articleAudioPlaying && !articleAudioPaused;
+  stopPlaybackOnly();
+  currentSentenceIndex = Math.max(0, Math.min(readerSentenceList.length - 1, currentSentenceIndex + delta));
+  highlightCurrentSentence(true);
+  if (shouldPlay && (wasPlaying || delta !== 0)) {
+    autoContinueArticleAudio = true;
+    playSentence(currentSentenceIndex, true);
   }
 }
 
-function playArticleBrowser() {
-  const btn = document.getElementById('audioPlay');
-  if (speechSynthesis.speaking && !speechSynthesis.paused) {
-    speechSynthesis.pause(); btn.textContent = '▶'; return;
+function repeatCurrentSentence(shouldPlay) {
+  if (!readerSentenceList.length) return;
+  stopPlaybackOnly();
+  highlightCurrentSentence(true);
+  if (shouldPlay) {
+    autoContinueArticleAudio = false;
+    playSentence(currentSentenceIndex, false);
   }
-  if (speechSynthesis.paused) {
-    speechSynthesis.resume(); btn.textContent = '❚❚'; return;
+}
+
+function stopPlaybackOnly() {
+  articleAudioPlaying = false;
+  articleAudioPaused = false;
+  if (currentArticleAudio) {
+    currentArticleAudio.pause();
+    currentArticleAudio = null;
   }
   speechSynthesis.cancel();
-  const paragraphs = State.currentArticle.en;
-  let idx = 0;
-  function speakNext() {
-    if (idx >= paragraphs.length) { btn.textContent = '▶'; return; }
-    const u = new SpeechSynthesisUtterance(paragraphs[idx]);
-    u.lang = 'en-US';
-    if (State.selectedVoice) {
-      const v = voices.find(x => x.name === State.selectedVoice);
-      if (v) u.voice = v;
-    }
-    u.rate = State.speechRate || 1.0;
-    u.onboundary = e => {
-      if (e.name !== 'word') return;
-      const slice = paragraphs[idx].slice(0, e.charIndex);
-      const wordIndex = (slice.match(/\S+/g) || []).length;
-      let gi = 0;
-      for (let i = 0; i < idx; i++) gi += (paragraphs[i].match(/\S+/g) || []).length;
-      gi += wordIndex;
-      const spans = document.querySelectorAll('.reader-text .word');
-      spans.forEach(s => s.classList.remove('speaking'));
-      if (spans[gi]) { spans[gi].classList.add('speaking'); spans[gi].scrollIntoView({behavior:'smooth', block:'center'}); }
+  const btn = document.getElementById('audioPlay');
+  if (btn) btn.textContent = '▶';
+}
+
+function playSentence(index, continueAfter) {
+  if (!readerSentenceList.length) return;
+  currentSentenceIndex = Math.max(0, Math.min(readerSentenceList.length - 1, index));
+  autoContinueArticleAudio = continueAfter;
+  if (State.ttsProvider === 'google' && State.googleTtsKey) playSentenceGoogle();
+  else playSentenceBrowser();
+}
+
+async function playSentenceGoogle() {
+  const sentence = readerSentenceList[currentSentenceIndex];
+  if (!sentence) return;
+  const btn = document.getElementById('audioPlay');
+  btn.textContent = '…';
+  btn.disabled = true;
+  articleAudioPlaying = true;
+  articleAudioPaused = false;
+  highlightCurrentSentence(true);
+
+  try {
+    const b64 = await googleTTS(sentence.text, State.speechRate || 1.0);
+    if (!articleAudioPlaying) { btn.disabled = false; btn.textContent = '▶'; return; }
+    const audio = new Audio('data:audio/mp3;base64,' + b64);
+    currentArticleAudio = audio;
+    btn.disabled = false;
+    btn.textContent = '❚❚';
+    audio.onended = () => {
+      if (!autoContinueArticleAudio || currentSentenceIndex >= readerSentenceList.length - 1) {
+        articleAudioPlaying = false;
+        btn.textContent = '▶';
+        return;
+      }
+      currentSentenceIndex++;
+      playSentenceGoogle();
     };
-    u.onend = () => {
-      idx++;
-      if (idx < paragraphs.length) speakNext();
-      else { document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking')); btn.textContent = '▶'; }
+    audio.onerror = () => {
+      articleAudioPlaying = false;
+      btn.textContent = '▶';
     };
-    speechSynthesis.speak(u);
+    audio.play().catch(() => {
+      btn.textContent = '▶';
+      articleAudioPlaying = false;
+    });
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '▶';
+    articleAudioPlaying = false;
+    toast('Google TTS 失敗，切換瀏覽器聲音');
+    playSentenceBrowser();
   }
+}
+
+function playSentenceBrowser() {
+  const sentence = readerSentenceList[currentSentenceIndex];
+  if (!sentence) return;
+  const btn = document.getElementById('audioPlay');
+  stopPlaybackOnly();
+  articleAudioPlaying = true;
+  articleAudioPaused = false;
   btn.textContent = '❚❚';
-  speakNext();
+  highlightCurrentSentence(true);
+
+  const u = new SpeechSynthesisUtterance(sentence.text);
+  u.lang = 'en-US';
+  if (State.selectedVoice) {
+    const v = voices.find(x => x.name === State.selectedVoice);
+    if (v) u.voice = v;
+  }
+  u.rate = State.speechRate || 1.0;
+  u.onboundary = e => {
+    if (e.name !== 'word' && e.name !== 'sentence') return;
+    const sentenceEl = document.querySelector(`.reader-sentence[data-sentence-index="${currentSentenceIndex}"]`);
+    if (!sentenceEl || e.name !== 'word') return;
+    const slice = sentence.text.slice(0, e.charIndex);
+    const wordIndex = (slice.match(/\S+/g) || []).length;
+    const spans = sentenceEl.querySelectorAll('.word');
+    document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking'));
+    if (spans[wordIndex]) spans[wordIndex].classList.add('speaking');
+  };
+  u.onend = () => {
+    document.querySelectorAll('.reader-text .word').forEach(s => s.classList.remove('speaking'));
+    if (!autoContinueArticleAudio || currentSentenceIndex >= readerSentenceList.length - 1) {
+      articleAudioPlaying = false;
+      articleAudioPaused = false;
+      btn.textContent = '▶';
+      return;
+    }
+    currentSentenceIndex++;
+    playSentenceBrowser();
+  };
+  u.onerror = () => {
+    articleAudioPlaying = false;
+    articleAudioPaused = false;
+    btn.textContent = '▶';
+  };
+  speechSynthesis.speak(u);
 }
 
 let mediaRecorder = null;

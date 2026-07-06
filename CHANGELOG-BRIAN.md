@@ -41,3 +41,17 @@
 - Added cache-busting query strings to CSS and all JS files.
 - Added build marker: `20260705-v3-no-password-cachebust`.
 - Added stricter OpenRouter/Groq API key validation before `fetch`.
+
+## 2026-07-06 · v4 sentence audio + article import
+
+- Disabled the prior trial/paywall access logic. `Access.tryUse()` now always returns true; no passcode, no daily limit, no paywall modal.
+- Added sentence-level reading controls in the article reader:
+  - previous sentence / repeat sentence / next sentence
+  - current sentence highlight
+  - sentence counter
+  - works with browser TTS and Google Cloud TTS fallback flow
+- Added web article import:
+  - paste a URL, then fetch readable text through Reader API
+  - paste raw article body as fallback
+  - AI turns the source into an English reading lesson with Traditional Chinese translation and comprehension quiz
+- Added cache-busted build marker `20260706-v4-reader-import`.

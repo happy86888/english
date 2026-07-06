@@ -407,39 +407,23 @@ function renderAccountInfo() {
   const el = document.getElementById('accountInfo');
   if (!el) return;
   const info = Access.getInfo();
-  let statusBadge;
-  if (info.isInWhitelist) {
-    statusBadge = `<span style="color:var(--success); font-weight:600">✓ 付費會員 · 無限制</span>`;
-  } else if (info.isInTrial) {
-    statusBadge = `<span style="color:var(--accent); font-weight:600">免費試用中</span> · 剩 <strong>${info.trialDaysLeft}</strong> 天`;
-  } else {
-    statusBadge = `<span style="color:var(--ink-muted)">每日限 ${info.dailyLimit} 次</span> · 今日已用 <strong>${info.todayUsed}</strong>/${info.dailyLimit}`;
-  }
-
   el.innerHTML = `
     <div class="settings-row">
       <div class="settings-label">
         使用狀態
-        <small>試用 30 天 · 之後每日限用 ${info.dailyLimit} 個不同內容</small>
+        <small>目前版本未啟用通行碼、試用期或每日次數限制</small>
       </div>
-      <div style="font-size:0.95rem">${statusBadge}</div>
+      <div style="font-size:0.95rem; color:var(--success); font-weight:600">✓ 無限制使用</div>
     </div>
     <div class="settings-row" style="display:block">
       <div class="settings-label" style="margin-bottom:0.5rem">
         裝置 ID
-        <small>付費後請把這個 ID 複製傳給站長</small>
+        <small>僅保留作為本機資料識別，不會影響使用權限</small>
       </div>
       <div style="display:flex; gap:0.5rem; align-items:center">
         <code style="flex:1; background:var(--bg); padding:0.55rem 0.7rem; border-radius:6px; border:1px solid var(--line); word-break:break-all; font-size:0.78rem; font-family:'Inter',monospace">${escapeHTML(info.deviceId)}</code>
         <button class="action-btn" id="copyDeviceIdBtn" style="font-size:0.85rem">複製</button>
       </div>
-    </div>
-    <div class="settings-row">
-      <div class="settings-label">
-        想要無限制?
-        <small>聯絡站長付費後即可解鎖</small>
-      </div>
-      <div style="font-family:monospace; font-size:1rem; color:var(--accent); font-weight:600">${escapeHTML(info.lineId)}</div>
     </div>
   `;
 
@@ -746,7 +730,8 @@ window.updateAccessStatus = function() {
   const el = document.getElementById('accessStatus');
   if (!el) return;
   const info = Access.getInfo();
-  el.textContent = info.statusText;
+  el.textContent = info.statusText || '';
+  el.style.display = info.statusText ? '' : 'none';
   el.classList.toggle('unlimited', info.isUnlimited);
   el.classList.toggle('limited', !info.isUnlimited);
 };

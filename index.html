@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta name="brian-build" content="20260705-v3-no-password-cachebust">
+  <meta name="brian-build" content="20260706-v4-reader-import">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>晨讀 · Dawn Reader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260705-v3">
+<link rel="stylesheet" href="css/style.css?v=20260706-v4">
 </head>
 <body>
 
@@ -73,7 +73,10 @@
         <h2 class="section-title">The <em>library</em></h2>
         <p class="section-sub">所有短文 · 依難度分級</p>
       </div>
-      <button class="action-btn" id="libraryGenerateBtn">✦ AI 產生新短文</button>
+      <div class="section-button-row">
+        <button class="action-btn secondary" id="importArticleBtn">↗ 匯入網頁文章</button>
+        <button class="action-btn" id="libraryGenerateBtn">✦ AI 產生新短文</button>
+      </div>
     </div>
     <div class="vocab-controls">
       <button class="filter-btn active" data-level="all">全部</button>
@@ -99,14 +102,19 @@
       <h1 class="reader-title" id="readerTitle"></h1>
       <p class="reader-title-zh" id="readerTitleZh"></p>
       <p id="readerSourceLink" style="font-size:0.85rem; color:var(--ink-light); margin-top:-1.2rem; margin-bottom:1.5rem; display:none">
-        改寫自 <a id="readerSourceA" href="#" target="_blank" style="color:var(--accent)">Wikipedia</a>
+        來源：<a id="readerSourceA" href="#" target="_blank" style="color:var(--accent)">原文連結</a>
       </p>
       <div class="reader-text" id="readerText"></div>
       <div class="reader-zh" id="readerZh"></div>
+      <div class="reader-phrases" id="readerPhrases"></div>
     </article>
 
     <div class="audio-bar" id="audioBar">
-      <button class="audio-btn" id="audioPlay">▶</button>
+      <button class="audio-btn" id="audioPlay" title="播放 / 暫停">▶</button>
+      <button class="audio-btn" id="audioPrev" title="回到上一句重讀">↶</button>
+      <button class="audio-btn" id="audioRepeat" title="重讀目前這一句">⟲</button>
+      <button class="audio-btn" id="audioNext" title="跳到下一句">↷</button>
+      <div class="audio-sentence-status" id="audioSentenceStatus">第 1 句</div>
       <div class="audio-speed">
         <button class="speed-btn" data-speed="0.7">0.7×</button>
         <button class="speed-btn active" data-speed="0.9">0.9×</button>
@@ -460,6 +468,40 @@
   </div>
 </div>
 
+<!-- Import Web Article Modal -->
+<div class="modal-backdrop" id="articleImportModal">
+  <div class="modal article-import-modal">
+    <h3>Import <em>article</em></h3>
+    <p>貼上英文文章網址或直接貼正文，AI 會整理成可朗讀、可翻譯、可測驗的閱讀教材。</p>
+    <div class="modal-form" id="articleImportForm">
+      <label>文章網址</label>
+      <input type="text" class="search-input" id="articleImportUrl" placeholder="https://ydrop.com/newsletters/this-loyalty-program-surprised-me">
+      <small class="field-note">系統會先嘗試用 Reader API 讀取網頁；若原站阻擋，請把正文貼到下方。</small>
+      <label>或直接貼上英文正文</label>
+      <textarea class="search-input" id="articleImportText" rows="8" placeholder="Paste the article text here..." style="font-family:'Fraunces',serif; resize:vertical"></textarea>
+      <label>學習難度</label>
+      <select class="search-input" id="articleImportLevel">
+        <option value="A2">A2 · 簡化成初中級</option>
+        <option value="B1" selected>B1 · 保留自然語感</option>
+        <option value="B2">B2 · 接近原文難度</option>
+      </select>
+      <label>處理方式</label>
+      <select class="search-input" id="articleImportMode">
+        <option value="study" selected>閱讀學習版：重整文章、翻譯、測驗</option>
+        <option value="faithful">忠實翻譯版：盡量保留原文邏輯</option>
+      </select>
+    </div>
+    <div class="gen-progress" id="articleImportProgress">
+      <div class="spinner"></div>
+      <div class="gen-status" id="articleImportStatus">讀取文章中…</div>
+    </div>
+    <div class="modal-actions">
+      <button class="action-btn secondary" id="articleImportCancelBtn">取消</button>
+      <button class="action-btn" id="articleImportSubmitBtn">匯入並產生教材</button>
+    </div>
+  </div>
+</div>
+
 <!-- AI Personalized Review Story Modal -->
 <div class="modal-backdrop" id="aiReviewModal">
   <div class="modal">
@@ -527,17 +569,16 @@
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
-<!-- Load order matters: data → storage → api → reader → vocab → videos → speaking → main -->
-<!-- Build 20260705-v3: no auth.js, cache-busted assets. Load order matters: data → storage → whitelist → access → api → ... → main -->
-<script src="js/data.js?v=20260705-v3"></script>
-<script src="js/storage.js?v=20260705-v3"></script>
-<script src="js/whitelist.js?v=20260705-v3"></script>
-<script src="js/access.js?v=20260705-v3"></script>
-<script src="js/api.js?v=20260705-v3"></script>
-<script src="js/reader.js?v=20260705-v3"></script>
-<script src="js/vocab.js?v=20260705-v3"></script>
-<script src="js/videos.js?v=20260705-v3"></script>
-<script src="js/speaking.js?v=20260705-v3"></script>
-<script src="js/main.js?v=20260705-v3"></script>
+<!-- Build 20260706-v4: no passcode, no usage limit, sentence audio, web article import. -->
+<script src="js/data.js?v=20260706-v4"></script>
+<script src="js/storage.js?v=20260706-v4"></script>
+<script src="js/access.js?v=20260706-v4"></script>
+<script src="js/api.js?v=20260706-v4"></script>
+<script src="js/reader.js?v=20260706-v4"></script>
+<script src="js/vocab.js?v=20260706-v4"></script>
+<script src="js/videos.js?v=20260706-v4"></script>
+<script src="js/speaking.js?v=20260706-v4"></script>
+<script src="js/importer.js?v=20260706-v4"></script>
+<script src="js/main.js?v=20260706-v4"></script>
 </body>
 </html>
